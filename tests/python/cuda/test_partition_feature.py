@@ -286,7 +286,7 @@ def load_reddit():
     data = dataset[0]
     train_idx = data.train_mask.nonzero(as_tuple=False).view(-1)
     csr_topo = quiver.CSRTopo(data.edge_index)
-    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, [25, 10], 0, mode="UVA")
+    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, [20], 0, mode="UVA")
     print(f"average degree of Reddit = {torch.sum(csr_topo.degree) / csr_topo.node_count}")
     return train_idx, csr_topo, quiver_sampler
 
@@ -346,10 +346,10 @@ def test_cdf():
 
 def test_random_partiton_without_replication():
     print(f"{'=' * 30 } Random Partition {'=' * 30 }")
-    train_idx, csr_topo, quiver_sampler = load_products()
+    train_idx, csr_topo, quiver_sampler = load_reddit()
     
 
-    for partition_num in range(1, 10, 1):
+    for partition_num in range(4, 5, 1):
         idx_len = train_idx.size(0)
         random.shuffle(train_idx)
         partition_book = torch.randint(0, partition_num, size = (csr_topo.node_count, ))
@@ -380,7 +380,7 @@ def test_random_partiton_without_replication():
 
 def test_random_partition_with_hot_replicate():
     print(f"{'=' * 30 } Random Partition With Replication {'=' * 30 }")
-    train_idx, csr_topo, quiver_sampler = load_paper100M()
+    train_idx, csr_topo, quiver_sampler = load_reddit()
 
     cache_rate = 0.2
     node_degree = csr_topo.degree
@@ -540,15 +540,15 @@ def test_old_partition():
 #test_cdf()
 
 # Uncomment to test random partition
-#test_random_partiton_without_replication()
+test_random_partiton_without_replication()
 
 # Uncomment to test random partition with degree based replication
-#test_random_partition_with_hot_replicate()
+# test_random_partition_with_hot_replicate()
 
 # Uncomment to test old partition
 #test_old_partition()
 # Uncomment to test quiver partition algorithm
-test_quiver_partition_without_replication()
+# test_quiver_partition_without_replication()
 
 # Uncomment to test partition loading
 #test_load_partition()
