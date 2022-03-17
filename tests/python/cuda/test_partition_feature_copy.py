@@ -1,3 +1,4 @@
+import time
 import torch
 
 
@@ -14,6 +15,7 @@ import shutil
 import os
 from typing import List
 import quiver.utils as quiver_util
+from tqdm import tqdm
 
 
 
@@ -82,6 +84,7 @@ def partition_feature_without_replication(probs: List[torch.Tensor], chunk_size:
         res[partition_idx] = torch.cat(res[partition_idx])
     return res, probs
 
+
 def quiver_partition_feature(probs:torch.Tensor, result_path: str, cache_memory_budget=0, per_feature_size=0, chunk_size=QUIVER_MAGIC_NUMBER):
     """
     Partition graph feature based on access probability and generate result folder. The final result folder will be like:
@@ -111,7 +114,8 @@ def quiver_partition_feature(probs:torch.Tensor, result_path: str, cache_memory_
     """
 
     if os.path.exists(result_path):
-        res = input(f"{result_path} already exists, enter Y/N to continue, If continue, {result_path} will be deleted:")
+        # res = input(f"{result_path} already exists, enter Y/N to continue, If continue, {result_path} will be deleted:")
+        res = "y"
         res = res.upper()
         if res == "Y":
             shutil.rmtree(result_path)
@@ -154,7 +158,6 @@ def quiver_partition_feature(probs:torch.Tensor, result_path: str, cache_memory_
     torch.save(partition_book, partition_book_path)
 
     return partition_book, partition_res, cache_res
-
 
 
 def load_quiver_feature_partition(partition_idx: int, result_path:str):
@@ -262,44 +265,44 @@ def load_mag240M():
     print(f"average degree of MAG240M = {torch.sum(csr_topo.degree) / csr_topo.node_count}")
     return train_idx, csr_topo, quiver_sampler
 
-def load_paper100M():
+def load_paper100M(step=[1]):
     indptr = torch.load("/data/papers/ogbn_papers100M/csr/indptr.pt")
     indices = torch.load("/data/papers/ogbn_papers100M/csr/indices.pt")
     train_idx = torch.load("/data/papers/ogbn_papers100M/index/train_idx.pt")
     csr_topo = quiver.CSRTopo(indptr=indptr, indices=indices)
-    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, [1], 0, mode="UVA")
+    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, step, 0, mode="UVA")
     print(f"average degree of paper100M = {torch.sum(csr_topo.degree) / csr_topo.node_count}")
     return train_idx, csr_topo, quiver_sampler
 
-def load_products():
+def load_products(step=[1]):
     root = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', 'products')
     dataset = PygNodePropPredDataset('ogbn-products', root)
     data = dataset[0]
     csr_topo = quiver.CSRTopo(data.edge_index)
     split_idx = dataset.get_idx_split()
     train_idx = split_idx['train']
-    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, [15], 0, mode="UVA")
+    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, step, 0, mode="UVA")
     print(f"average degree of products = {torch.sum(csr_topo.degree) / csr_topo.node_count}")
     return train_idx, csr_topo, quiver_sampler
 
-def load_reddit():
+def load_reddit(step=[1]):
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', 'Reddit')
     dataset = Reddit(path)
     data = dataset[0]
     train_idx = data.train_mask.nonzero(as_tuple=False).view(-1)
     csr_topo = quiver.CSRTopo(data.edge_index)
-    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, [10, 7, 3], 0, mode="UVA")
+    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, step, 0, mode="UVA")
     print(f"average degree of Reddit = {torch.sum(csr_topo.degree) / csr_topo.node_count}")
     return train_idx, csr_topo, quiver_sampler
 
-def load_com_lj():
+def load_com_lj(step):
     indptr = torch.load("/home/dalong/data/com-lj_indptr.pt")
     indices = torch.load("/home/dalong/data/com-lj_indices.pt")
     csr_topo = quiver.CSRTopo(indptr=indptr, indices=indices)
     print("node count", csr_topo.node_count)
     print("edge count", csr_topo.edge_count)
     
-    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, [15, 10, 5], 0, mode="UVA")
+    quiver_sampler = quiver.pyg.GraphSageSampler(csr_topo, step, 0, mode="UVA")
     train_idx = torch.randint(0, csr_topo.node_count, (csr_topo.node_count // 5, ))
     print(f"average degree of LJ = {torch.sum(csr_topo.degree) / csr_topo.node_count}")
     return train_idx, csr_topo, quiver_sampler
@@ -346,25 +349,65 @@ def test_cdf():
     plt.savefig("lj_30_cdf.png")
 
 
-def test_random_partiton_without_replication():
-    print(f"{'=' * 30 } Random Partition {'=' * 30 }")
-    train_idx, csr_topo, quiver_sampler = load_reddit()
+# def test_random_partiton_without_replication(step):
+#     print(f"{'=' * 30 } Random Partition {'=' * 30 }")
+#     train_idx, csr_topo, quiver_sampler = load_products(step)
+#     print(f'Step: {step}')
     
+#     hit_rate_results = []
+#     for partition_num in range(4, 5, 1):
+#         idx_len = train_idx.size(0)
+#         # random.shuffle(train_idx)
+#         train_idx = train_idx[torch.randperm(idx_len)]
+#         partition_book = torch.randint(0, partition_num, size = (csr_topo.node_count, ))
+
+#         distribution = [((partition_book == partition).nonzero()).shape[0] for partition in range(partition_num)]
+
+#         print(f"partition distribution: {distribution}")
+
+        
+
+#         local_train_idx = train_idx[:idx_len // partition_num]
+
+#         train_loader = torch.utils.data.DataLoader(local_train_idx,
+#                                                 batch_size=1024,
+#                                                 pin_memory=True,
+#                                                 shuffle=True)
+#         total_count = 0
+#         total_hit = 0
+#         for _ in range(10):
+#             for seeds in train_loader:
+#                 n_id, _, _ = quiver_sampler.sample(seeds)
+                
+#                 hit_count = ((partition_book[n_id] == 0).nonzero()).shape[0]
+#                 total_hit += hit_count
+#                 total_count += n_id.shape[0]
+#         print(f"Partition = {partition_num}, Local hit rate = {total_hit / total_count}")
+#         hit_rate_results.append(total_hit / total_count)
+#     return hit_rate_results
+
+def test_random_partiton_without_replication(step):
+    print(f"{'=' * 30 } Random Partition {'=' * 30 }")
+    train_idx, csr_topo, quiver_sampler = load_reddit(step)
+    print(f'Step: {step}')
+    
+    hit_rate_results = []
     for partition_num in range(4, 5, 1):
         idx_len = train_idx.size(0)
-        # random.shuffle(train_idx)
-        train_idx = train_idx[torch.randperm(idx_len)]
+        random.shuffle(train_idx)
+        # train_idx = train_idx[torch.randperm(idx_len)]
         global_partition_book = torch.randint(0, partition_num, size = (csr_topo.node_count, ))
+        print(torch.bincount(global_partition_book))
 
-
+        train_idx_2 = train_idx[torch.randperm(idx_len)]
         local_partition_books = []
         for partition in range(partition_num):
             local_partition_book = global_partition_book.clone()
             if partition == partition_num - 1:
-                local_partition_book[train_idx[(idx_len // partition_num) * partition:]] = partition
+                # local_partition_book[train_idx[(idx_len // partition_num) * partition:]] = partition
                 local_train_idx = train_idx[(idx_len // partition_num) * partition:]
             else:
-                local_partition_book[train_idx[(idx_len // partition_num) * partition: (idx_len // partition_num) * (partition+1)]] = partition
+                # local_partition_book[train_idx[(idx_len // partition_num) * partition: (idx_len // partition_num) * (partition+1)]] = partition
                 local_train_idx = train_idx[(idx_len // partition_num) * partition: (idx_len // partition_num) * (partition+1)]
             local_partition_books.append(local_partition_book)
 
@@ -381,78 +424,71 @@ def test_random_partiton_without_replication():
                     total_hit += hit_count
                     total_count += n_id.shape[0]
             print(f"Partition = {partition_num}, Local hit rate = {total_hit / total_count}")
+            hit_rate_results.append(total_hit / total_count)
+    return hit_rate_results
 
 
-
-def test_random_partition_with_hot_replicate():
+def test_random_partition_with_hot_replicate(step, cache_rate):
     print(f"{'=' * 30 } Random Partition With Replication {'=' * 30 }")
-    train_idx, csr_topo, quiver_sampler = load_products()
+    train_idx, csr_topo, quiver_sampler = load_products(step)
 
-    cache_rate = 0.1
+    
     node_degree = csr_topo.degree
+    print(f'Step: {step}, cache_rate: {cache_rate}')
     _, idx = torch.sort(node_degree, descending=True)
+    print(f'idx: {idx}')
     x = []
     y = []
 
-    hit_rate_results = []
-    for partition_num in range(7, 8, 1):
-        if partition_num > 1:
-            cache_rate += cache_rate * (1/(partition_num-1))
-        
+    for partition_num in range(2, 10, 1):
         idx_len = train_idx.size(0)
-        # random.shuffle(train_idx)
-        train_idx = train_idx[torch.randperm(idx_len)]
+        random.shuffle(train_idx)
         feature = torch.arange(0, csr_topo.node_count, dtype=torch.long)
         feature = feature[idx]
         cached_nodes = int(cache_rate * csr_topo.node_count)
         # random partition
-        global_partition_book = torch.randint(0, partition_num, size = (csr_topo.node_count, ))
-
+        partition_book = torch.randint(0, partition_num, size = (csr_topo.node_count, ))
         # cache hot data 
-        local_partition_books = []
-        for partition in range(partition_num):
-            local_partition_book = global_partition_book.clone()
-            local_partition_book[idx[:cached_nodes]] = partition
-            local_partition_books.append(local_partition_book)
+        partition_book[idx[:cached_nodes]] = 0
+
+        distribution = [((partition_book == partition).nonzero()).shape[0] for partition in range(partition_num)]
+
+        print(f"partition distribution: {distribution}")
 
 
-        for partition in range(partition_num):
-            if partition == partition_num - 1:
-                local_train_idx = train_idx[(idx_len // partition_num) * partition: ]
-            else:
-                local_train_idx = train_idx[(idx_len // partition_num) * partition: (idx_len // partition_num) * (partition+1)]
+        local_train_idx = train_idx[:idx_len // partition_num]
 
-
-            train_loader = torch.utils.data.DataLoader(local_train_idx,
-                                                    batch_size=1024,
-                                                    pin_memory=True,
-                                                    shuffle=True)
-            total_count = 0
-            total_hit = 0
-
-            for _ in range(2):
-                for seeds in train_loader:
-                    n_id, _, _ = quiver_sampler.sample(seeds)
-                    hit_count = ((local_partition_books[partition][n_id] == partition).nonzero()).shape[0]
-                    total_hit += hit_count
-                    total_count += n_id.shape[0]
-            print(f"Partition = {partition}, Local hit rate = {total_hit / total_count}")
-            x.append(partition)
-            y.append(total_hit / total_count)
+        train_loader = torch.utils.data.DataLoader(local_train_idx,
+                                                batch_size=1024,
+                                                pin_memory=True,
+                                                shuffle=True)
+        total_count = 0
+        total_hit = 0
+        for _ in range(2):
+            for seeds in train_loader:
+                n_id, _, _ = quiver_sampler.sample(seeds)
+                hit_count = ((partition_book[n_id] == 0).nonzero()).shape[0]
+                total_hit += hit_count
+                total_count += n_id.shape[0]
+        print(f"Partition = {partition_num}, Local hit rate = {total_hit / total_count}")
+        x.append(partition_num)
+        y.append(total_hit / total_count)
 
     plt.plot(x, y)
 
 
-
-def test_quiver_partition_without_replication():
+def test_quiver_partition_without_replication(step, cache_rate=0.0):
     print(f"{'=' * 30 } Quiver Partition {'=' * 30 }")
-    train_idx, csr_topo, quiver_sampler = load_products()
+    train_idx, csr_topo, quiver_sampler = load_paper100M(step)
+    print(f'Sampling steps: {step} - Cache rate: {cache_rate}')
     torch.cuda.set_device(0)
 
-    cache_rate = 0.075
+    cache_rate = cache_rate
+
+    return_dict = []
     
 
-    for partition_num in range(7, 8, 1):
+    for partition_num in range(4, 5, 1):
         idx_len = train_idx.size(0)
         shuffled_train_idx = train_idx[torch.randperm(idx_len)]
         partition_train_idx_list = []
@@ -496,17 +532,8 @@ def test_quiver_partition_without_replication():
                 total_hit += hit_count
                 total_count += n_id.shape[0]
             print(f"PartitionNum = {partition_num}, PartitionIdx = {partition}, Local hit rate = {total_hit / total_count}")
-
-def test(hit_)
-
-cpu-feature =feature
-gpyfeature = feature.to(0)
-...
-hitnodes, non-hit = ...
-
-cpufeat = cpufeature[nonhit].to(0)
-gpufeat = gpufeature[hit]
-
+            return_dict.append(total_hit / total_count)
+    return return_dict
 
 def test_load_partition():
     result_path = "partition_result_dir"
@@ -520,7 +547,6 @@ def test_old_partition():
     torch.cuda.set_device(0)
 
     
-
     for partition_num in range(4, 5, 1):
         idx_len = train_idx.size(0)
         random.shuffle(train_idx)
@@ -561,23 +587,81 @@ def test_old_partition():
                 total_count += n_id.shape[0]
             print(f"PartitionNum = {partition_num}, PartitionIdx = {partition}, Local hit rate = {total_hit / total_count}")
 
+sampling_steps = [ 
+        [15,10,5],
+        [15,15,15],
+        [10,15,20],
+        [10,15,15],
+        [10,7,3],
+        [10,10,10],
+        [5,5,5],
+        [5,3,3],
+        [1,1,1],
+        [15,15],
+        [10,5],
+        [10,10],
+        [8,8],
+        [5,5],
+        [1,1],
+        [20],
+        [15],
+        [10],
+        [5],
+        [1] 
+        ]
+# def run_experiments_part_feat(output_name, cache_rate=0.0, sampling_steps=sampling_steps):
+#     with open(f"exp_results/{output_name}", 'w') as f:
+#         time_start = time.time()
+#         f.write(f"sampling: {cache_rate};Hit rate 1;Hit rate 2;Hit rate 3;Hit rate 4\n")
+#         for step in tqdm(sampling_steps):
+#             f.write(f"{step};")
+#             rates = test_quiver_partition_without_replication(step, cache_rate=cache_rate)
+#             for i in range(len(rates)):
+#                 if i == len(rates) -1:
+#                     f.write(f"{rates[i]}\n")
+#                 else:
+#                     f.write(f"{rates[i]};")
+#             print('waiting 0.3s')
+#             time.sleep(0.3)
+#             print('waiting done. Continue')
+#     print(f'Done exp in {time.time() - time_start}')
+
+
+# run_experiments_part_feat('reddit_no_rep.txt')
+# run_experiments_part_feat('reddit_with_rep.txt', cache_rate=0.2)
 
 # Uncomment to check CDF of a certain dataset
 #test_cdf()
 
 # Uncomment to test random partition
-# test_random_partiton_without_replication()
+# time_start = time.time()
+# test_random_partiton_without_replication(sampling_steps[2])
 
 # Uncomment to test random partition with degree based replication
-test_random_partition_with_hot_replicate()
 
+# print(f'Run time: {time.time() - time_start}')
 # Uncomment to test old partition
 #test_old_partition()
 # Uncomment to test quiver partition algorithm
-# test_quiver_partition_without_replication()
+# print(test_quiver_partition_without_replication([15], 0.05))
+# print(test_quiver_partition_without_replication([8, 8]))
 
 # Uncomment to test partition loading
 #test_load_partition()
 
 # Draw figure
-plt.savefig("local_hit_rate.png")
+# plt.savefig("local_hit_rate.png")
+
+# print(test_random_partition_with_hot_replicate([15], 0.2))
+time_start = time.time()
+
+
+# print(f'Run time: {time.time() - time_start}')
+# result = test_quiver_partition_without_replication(sampling_steps[19])
+# result = test_quiver_partition_without_replication(sampling_steps[18], 0.2)
+# result = test_random_partition_with_hot_replicate(sampling_steps[19], 0.2)
+result = test_random_partiton_without_replication(sampling_steps[15])
+result.append(time.time() - time_start)
+print(result)
+print(f'Run time: {time.time() - time_start}')
+
